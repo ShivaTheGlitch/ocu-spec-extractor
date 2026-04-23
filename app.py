@@ -47,7 +47,7 @@ def rule_extract(text):
 
 
 # -----------------------------
-# AI extraction (Gemini FIXED)
+# AI extraction (ROBUST)
 # -----------------------------
 def ai_extract(text):
     prompt = f"""
@@ -77,12 +77,14 @@ def ai_extract(text):
     """
 
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # Use stable model name
+        model = genai.GenerativeModel("models/text-bison-001")
+
         response = model.generate_content(prompt)
 
         raw_text = response.text.strip()
 
-        # Try parsing JSON safely
+        # Try JSON parsing
         try:
             return json.loads(raw_text)
         except:
