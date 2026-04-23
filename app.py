@@ -4,10 +4,7 @@ import pandas as pd
 import json
 import re
 import os
-import google.generativeai as genai
-
-# Configure Gemini API
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+import requests
 
 st.title("OCU Spec Extractor (Free Version)")
 
@@ -15,7 +12,7 @@ uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
 
 
 # -----------------------------
-# Extract text from PDF
+# Extract text
 # -----------------------------
 def extract_text(file):
     text = ""
@@ -39,63 +36,66 @@ def rule_extract(text):
     if ip:
         data["IP Rating"] = ", ".join(set(ip))
 
-    temp = re.findall(r'(\d+\s?-\s?\d+\s?°?C)', text)
-    if temp:
-        data["Temperature Range"] = ", ".join(set(temp))
-
     return data
 
 
 # -----------------------------
-# AI extraction (ROBUST)
+# AI extraction (REST API)
 # -----------------------------
 def ai_extract(text):
-    prompt = f"""
-    You are an expert in wastewater and odour control systems.
+    api_key = os.getenv("GOOGLE_API_KEY")
 
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+
+    prompt = f"""
     Extract the following parameters:
 
-    - System Type (STP, SPS, ETP)
-    - H2S Average (ppm)
-    - H2S Peak (ppm)
-    - H2S Outlet Limit
-    - Removal Efficiency (%)
+    - System Type
+    - H2S Average
+    - H2S Peak
+    - H2S Outlet
+    - Removal Efficiency
     - Technology Type
-    - Fan Type
     - Fan MOC
-    - Duty/Standby Configuration
-    - Air Changes Per Hour (ACPH)
+    - Duty Standby
+    - ACPH
     - Duct Material
-    - Hazardous Area Classification
-    - Instrumentation
+    - Hazardous Area
+    - Instruments
 
-    Return ONLY valid JSON.
-    If not found, return "Not specified".
+    Return ONLY JSON.
 
     TEXT:
-    {text[:12000]}
+    {text[:10000]}
     """
 
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ]
+    }
+
     try:
-        # Use stable model name
-        model = genai.GenerativeModel("models/text-bison-001")
+        response = requests.post(url, json=payload)
+        result = response.json()
 
-        response = model.generate_content(prompt)
+        output_text = result["candidates"][0]["content"]["parts"][0]["text"]
 
-        raw_text = response.text.strip()
-
-        # Try JSON parsing
         try:
-            return json.loads(raw_text)
+            return json.loads(output_text)
         except:
-            return {"Raw Output": raw_text}
+            return {"Raw Output": output_text}
 
     except Exception as e:
         return {"Error": str(e)}
 
 
 # -----------------------------
-# Main execution
+# Main
 # -----------------------------
 if uploaded_file:
     st.write("Processing...")
