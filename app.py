@@ -4,16 +4,19 @@ import pandas as pd
 import json
 import re
 import os
-from openai import OpenAI
+import google.generativeai as genai
 
-# Initialize OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Configure Gemini API
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-st.title("OCU Spec Extractor")
+st.title("OCU Spec Extractor (Free Version)")
 
 uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
 
 
+# -----------------------------
+# Extract text from PDF
+# -----------------------------
 def extract_text(file):
     text = ""
     with pdfplumber.open(file) as pdf:
@@ -22,6 +25,9 @@ def extract_text(file):
     return text
 
 
+# -----------------------------
+# Rule-based extraction
+# -----------------------------
 def rule_extract(text):
     data = {}
 
@@ -40,44 +46,49 @@ def rule_extract(text):
     return data
 
 
+# -----------------------------
+# AI extraction (Gemini)
+# -----------------------------
 def ai_extract(text):
     prompt = f"""
-    Extract the following:
+    You are an expert in wastewater and odour control systems.
 
-    - System Type
-    - H2S Avg
-    - H2S Peak
-    - H2S Outlet
-    - Removal Efficiency
+    Extract the following parameters:
+
+    - System Type (STP, SPS, ETP)
+    - H2S Average (ppm)
+    - H2S Peak (ppm)
+    - H2S Outlet Limit
+    - Removal Efficiency (%)
     - Technology Type
+    - Fan Type
     - Fan MOC
-    - Duty Standby
-    - ACPH
+    - Duty/Standby Configuration
+    - Air Changes Per Hour (ACPH)
     - Duct Material
-    - Hazardous Area
-    - Instruments
+    - Hazardous Area Classification
+    - Instrumentation
 
-    Return JSON only.
+    Return ONLY valid JSON.
+    If not found, return "Not specified".
 
     TEXT:
     {text[:12000]}
     """
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
+        model = genai.GenerativeModel("gemini-pro")
+        response = model.generate_content(prompt)
 
-        result = response.choices[0].message.content
-        return json.loads(result)
+        return json.loads(response.text)
 
     except Exception as e:
         return {"Error": str(e)}
 
 
+# -----------------------------
+# Main execution
+# -----------------------------
 if uploaded_file:
     st.write("Processing...")
 
