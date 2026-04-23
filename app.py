@@ -6,14 +6,11 @@ import re
 import os
 import requests
 
-st.title("OCU Spec Extractor (Free Version)")
+st.title("OCU Spec Extractor (Stable Version)")
 
 uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
 
 
-# -----------------------------
-# Extract text
-# -----------------------------
 def extract_text(file):
     text = ""
     with pdfplumber.open(file) as pdf:
@@ -22,9 +19,6 @@ def extract_text(file):
     return text
 
 
-# -----------------------------
-# Rule-based extraction
-# -----------------------------
 def rule_extract(text):
     data = {}
 
@@ -36,67 +30,41 @@ def rule_extract(text):
     if ip:
         data["IP Rating"] = ", ".join(set(ip))
 
+    temp = re.findall(r'(\d+\s?-\s?\d+\s?°?C)', text)
+    if temp:
+        data["Temperature Range"] = ", ".join(set(temp))
+
     return data
 
 
-# -----------------------------
-# AI extraction (REST API)
-# -----------------------------
 def ai_extract(text):
     api_key = os.getenv("GOOGLE_API_KEY")
 
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
 
     prompt = f"""
-    Extract the following parameters:
-
-    - System Type
-    - H2S Average
-    - H2S Peak
-    - H2S Outlet
-    - Removal Efficiency
-    - Technology Type
-    - Fan MOC
-    - Duty Standby
-    - ACPH
-    - Duct Material
-    - Hazardous Area
-    - Instruments
-
-    Return ONLY JSON.
+    Extract key engineering parameters from this document.
+    Return JSON format.
 
     TEXT:
-    {text[:10000]}
+    {text[:8000]}
     """
 
     payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt}
-                ]
-            }
-        ]
+        "contents": [{"parts": [{"text": prompt}]}]
     }
 
     try:
         response = requests.post(url, json=payload)
         result = response.json()
 
-        output_text = result["candidates"][0]["content"]["parts"][0]["text"]
-
-        try:
-            return json.loads(output_text)
-        except:
-            return {"Raw Output": output_text}
+        # DEBUG: show full response
+        return {"AI Raw Response": str(result)}
 
     except Exception as e:
-        return {"Error": str(e)}
+        return {"AI Error": str(e)}
 
 
-# -----------------------------
-# Main
-# -----------------------------
 if uploaded_file:
     st.write("Processing...")
 
@@ -104,7 +72,13 @@ if uploaded_file:
 
     data = {}
     data.update(rule_extract(text))
-    data.update(ai_extract(text))
+
+    # Try AI but don't break app
+    try:
+        ai_data = ai_extract(text)
+        data.update(ai_data)
+    except:
+        data["AI"] = "Failed"
 
     df = pd.DataFrame(list(data.items()), columns=["Parameter", "Value"])
 
